@@ -83,6 +83,53 @@
                         </table>
                     </div>
                 </div>
+
+                <!-- Time Slot Analyzer -->
+                <div class="mt-6 bg-gray-50 dark:bg-gray-800 rounded-lg p-6 shadow-lg">
+                    <h2 class="text-xl font-semibold mb-4">Time Slot Analyzer</h2>
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Find which teachers are free during a specific time period</p>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Select Day</label>
+                            <select id="analyzeDay" class="w-full px-3 py-2 text-base border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-gray-700">
+                                <option value="">Choose Day</option>
+                                <option value="1">Day 1</option>
+                                <option value="2">Day 2</option>
+                                <option value="3">Day 3</option>
+                                <option value="4">Day 4</option>
+                                <option value="5">Day 5</option>
+                                <option value="6">Day 6</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Select Period</label>
+                            <select id="analyzePeriod" class="w-full px-3 py-2 text-base border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-gray-700">
+                                <option value="">Choose Period</option>
+                                <option value="1">Period 1 (08:25-09:00)</option>
+                                <option value="2">Period 2 (09:00-09:35)</option>
+                                <option value="3">Period 3 (09:55-10:30)</option>
+                                <option value="4">Period 4 (10:30-11:05)</option>
+                                <option value="5">Period 5 (11:25-12:00)</option>
+                                <option value="6">Period 6 (12:00-12:35)</option>
+                                <option value="7">Period 7 (13:50-14:25)</option>
+                                <option value="8">Period 8 (14:25-15:00)</option>
+                                <option value="9">Period 9 (15:00-15:35)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="flex items-end">
+                            <button onclick="updateTimeSlotAnalysis()" class="w-full px-4 py-2 bg-primary text-white rounded hover:bg-purple-600 transition-colors">
+                                Find Free Teachers
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="timeSlotResult" class="mt-4">
+                        <div class="text-gray-500 dark:text-gray-400">Please select both day and period to see available teachers.</div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -1237,8 +1284,9 @@
                 Object.values(teacher.timetable).forEach(daySchedule => {
                     daySchedule.forEach(classInfo => {
                         if (classInfo && classInfo.trim() && !isBreakTime(classInfo)) {
-                            // Extract form numbers from class codes like "1A MATH 101", "2B ENG 202", etc.
-                            const matches = classInfo.match(/\b([1-6])([A-D]|A,\d+[A-D]|[A-D],\d+[A-D])/g);
+                            // Extract form numbers from class codes - look for patterns like "1A", "2B", "3C", etc.
+                            // This covers cases like "1A MATH 101", "4A,4B,4C,4D BM 301", "1A,1B,1C,1D IS 101..."
+                            const matches = classInfo.match(/\b([1-6])[A-D]/g);
                             if (matches) {
                                 matches.forEach(match => {
                                     const formNumber = match.charAt(0);
@@ -1275,14 +1323,17 @@
                 'Other': []
             };
             
-            // Add teachers to appropriate form groups
+            // Add teachers to appropriate form groups (avoid duplicates)
             Object.entries(teacherForms).forEach(([code, data]) => {
                 if (data.forms.length === 0) {
                     formGroups['Other'].push([code, data]);
                 } else {
-                    // Add teacher to each form they teach
+                    // Add teacher to each form they teach (avoid duplicates)
                     data.forms.forEach(form => {
-                        formGroups[form].push([code, data]);
+                        // Check if teacher is already in this form group
+                        if (!formGroups[form].find(([existingCode]) => existingCode === code)) {
+                            formGroups[form].push([code, data]);
+                        }
                     });
                 }
             });
@@ -1294,22 +1345,17 @@
                 const teachers = formGroups[formKey];
                 if (teachers.length > 0) {
                     const formLabel = formKey === 'Other' ? 'Other Teachers' : `Form ${formKey} Teachers`;
+                    const formSelectId = `select-form-${formKey}`;
                     html += `
                         <div class="mb-3">
-                            <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 px-2">${formLabel}</h3>
-                            <div class="space-y-1">
-                    `;
-                    
-                    // Add form-specific select all button
-                    if (formKey !== 'Other') {
-                        html += `
-                            <div class="mb-2 px-2">
-                                <button class="select-form-btn px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded transition-colors" data-form="${formKey}">
-                                    Select All Form ${formKey}
+                            <div class="flex justify-between items-center mb-2 px-2">
+                                <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300">${formLabel}</h3>
+                                <button id="${formSelectId}" class="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors">
+                                    Select All
                                 </button>
                             </div>
-                        `;
-                    }
+                            <div class="space-y-1">
+                    `;
                     
                     // Sort teachers within each group by name
                     teachers.sort((a, b) => a[1].name.localeCompare(b[1].name));
@@ -1317,7 +1363,7 @@
                     teachers.forEach(([code, data]) => {
                         const formsList = data.forms.length > 0 ? ` (F${data.forms.join(',')})` : '';
                         html += `
-                            <label class="flex items-center space-x-3 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer teacher-item" data-code="${code}" data-name="${data.name.toLowerCase()}" data-forms="${data.forms.join(',')}">
+                            <label class="flex items-center space-x-3 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer teacher-item" data-code="${code}" data-name="${data.name.toLowerCase()}">
                                 <input type="checkbox" value="${code}" class="teacher-checkbox text-primary focus:ring-primary rounded">
                                 <span class="text-sm">
                                     <span class="font-semibold">${code}</span> - ${data.name}<span class="text-xs text-gray-500 dark:text-gray-400">${formsList}</span>
@@ -1382,22 +1428,14 @@
                 updateTimetable();
             });
 
-            // Form-specific select buttons
-            document.addEventListener('click', (e) => {
-                if (e.target.classList.contains('select-form-btn')) {
-                    const formNumber = e.target.dataset.form;
-                    const teacherItems = document.querySelectorAll(`.teacher-item[data-forms*="${formNumber}"]`);
-                    
-                    teacherItems.forEach(item => {
-                        const checkbox = item.querySelector('.teacher-checkbox');
-                        if (checkbox && !checkbox.checked) {
-                            checkbox.checked = true;
-                            selectedTeachers.add(checkbox.value);
-                        }
+            // Form-specific select all buttons
+            [1, 2, 3, 4, 5, 6, 'Other'].forEach(formKey => {
+                const formSelectId = `select-form-${formKey}`;
+                const button = document.getElementById(formSelectId);
+                if (button) {
+                    button.addEventListener('click', () => {
+                        selectTeachersByForm(formKey);
                     });
-                    
-                    updateSelectedCount();
-                    updateTimetable();
                 }
             });
         }
@@ -1476,56 +1514,9 @@
                             </div>
                         </td>
                     </tr>
-                    <tr>
-                        <td colspan="7" class="border border-gray-300 dark:border-gray-600 px-4 py-6">
-                            <div class="border-t border-gray-200 dark:border-gray-600 pt-6">
-                                <div class="text-lg font-semibold mb-4 text-purple-700 dark:text-purple-400">
-                                    🔍 Check Specific Time Slot
-                                </div>
-                                <div class="flex flex-wrap items-center gap-4 mb-4">
-                                    <div class="flex items-center space-x-2">
-                                        <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Day:</label>
-                                        <select id="daySelector" class="px-3 py-2 text-base border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-gray-700">
-                                            <option value="">Select Day</option>
-                                            <option value="1">Day 1</option>
-                                            <option value="2">Day 2</option>
-                                            <option value="3">Day 3</option>
-                                            <option value="4">Day 4</option>
-                                            <option value="5">Day 5</option>
-                                            <option value="6">Day 6</option>
-                                        </select>
-                                    </div>
-                                    <div class="flex items-center space-x-2">
-                                        <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Period:</label>
-                                        <select id="periodSelector" class="px-3 py-2 text-base border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-gray-700">
-                                            <option value="">Select Period</option>
-                                            <option value="1">Period 1 (08:25-09:00)</option>
-                                            <option value="2">Period 2 (09:00-09:35)</option>
-                                            <option value="3">Period 3 (09:55-10:30)</option>
-                                            <option value="4">Period 4 (10:30-11:05)</option>
-                                            <option value="5">Period 5 (11:25-12:00)</option>
-                                            <option value="6">Period 6 (12:00-12:35)</option>
-                                            <option value="7">Period 7 (13:50-14:25)</option>
-                                            <option value="8">Period 8 (14:25-15:00)</option>
-                                            <option value="9">Period 9 (15:00-15:35)</option>
-                                        </select>
-                                    </div>
-                                    <button id="checkSlotBtn" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-md transition-colors text-sm font-medium">
-                                        Check Free Teachers
-                                    </button>
-                                </div>
-                                <div id="slotResults" class="hidden">
-                                    <!-- Results will be displayed here -->
-                                </div>
-                            </div>
-                        </td>
-                    </tr>
                 `;
                 
                 timetableBody.innerHTML = html;
-                
-                // Add event listeners for the time slot checker
-                setupTimeSlotChecker();
             }
         }
 
@@ -1560,6 +1551,30 @@
         function isBreakTime(classInfo) {
             const breakTimes = ['Class Period', 'Recess', 'Lunch', 'Roll Call'];
             return breakTimes.includes(classInfo);
+        }
+
+        function selectTeachersByForm(formKey) {
+            // Find the specific form section button that was clicked
+            const formSelectButton = document.getElementById(`select-form-${formKey}`);
+            if (!formSelectButton) return;
+            
+            // Find the form section container (the parent div of the button)
+            const formSection = formSelectButton.closest('.mb-3');
+            if (!formSection) return;
+            
+            // Find all checkboxes within this specific form section only
+            const checkboxesInSection = formSection.querySelectorAll('.teacher-checkbox');
+            
+            // Select all teachers in this specific form section
+            checkboxesInSection.forEach(checkbox => {
+                if (!checkbox.checked) {
+                    checkbox.checked = true;
+                    selectedTeachers.add(checkbox.value);
+                }
+            });
+            
+            updateSelectedCount();
+            updateTimetable();
         }
 
         function findCommonFreeTimeSlots() {
@@ -1622,100 +1637,29 @@
             return commonFreeSlotsGrouped;
         }
 
+        function findTeachersAvailableAt(day, period) {
+            // Map period to time slot
+            const teachingSlots = [
+                { slot: "08:25-09:00", period: 1 },
+                { slot: "09:00-09:35", period: 2 },
+                { slot: "09:55-10:30", period: 3 },
+                { slot: "10:30-11:05", period: 4 },
+                { slot: "11:25-12:00", period: 5 },
+                { slot: "12:00-12:35", period: 6 },
+                { slot: "13:50-14:25", period: 7 },
+                { slot: "14:25-15:00", period: 8 },
+                { slot: "15:00-15:35", period: 9 }
+            ];
 
+            const timeSlotInfo = teachingSlots.find(t => t.period === period);
+            if (!timeSlotInfo) return {};
 
-        function setupTimeSlotChecker() {
-            const daySelector = document.getElementById('daySelector');
-            const periodSelector = document.getElementById('periodSelector');
-            const checkSlotBtn = document.getElementById('checkSlotBtn');
-            const slotResults = document.getElementById('slotResults');
+            const dayIndex = day - 1; // Convert to 0-based index
+            const timeSlot = timeSlotInfo.slot;
 
-            // Update period options based on selected day
-            daySelector.addEventListener('change', () => {
-                const selectedDay = daySelector.value;
-                const periodOptions = periodSelector.querySelectorAll('option');
-                
-                periodOptions.forEach((option, index) => {
-                    if (index === 0) return; // Skip the "Select Period" option
-                    
-                    const periodValue = option.value;
-                    // Disable Period 8 and 9 for Day 6
-                    if (selectedDay === '6' && (periodValue === '8' || periodValue === '9')) {
-                        option.disabled = true;
-                        option.textContent = option.textContent + ' (Assembly)';
-                    } else {
-                        option.disabled = false;
-                        option.textContent = option.textContent.replace(' (Assembly)', '');
-                    }
-                });
-                
-                // Reset period selection if Day 6 and Period 8/9 was selected
-                if (selectedDay === '6' && (periodSelector.value === '8' || periodSelector.value === '9')) {
-                    periodSelector.value = '';
-                }
-            });
-
-            checkSlotBtn.addEventListener('click', () => {
-                const selectedDay = daySelector.value;
-                const selectedPeriod = periodSelector.value;
-                
-                if (!selectedDay || !selectedPeriod) {
-                    showAlert('Please select both Day and Period');
-                    return;
-                }
-                
-                checkSpecificTimeSlot(selectedDay, selectedPeriod);
-            });
-        }
-
-        function checkSpecificTimeSlot(dayNumber, periodNumber) {
-            const slotResults = document.getElementById('slotResults');
-            
-            // Map period number to time slot
-            const periodToSlot = {
-                1: "08:25-09:00",
-                2: "09:00-09:35", 
-                3: "09:55-10:30",
-                4: "10:30-11:05",
-                5: "11:25-12:00",
-                6: "12:00-12:35",
-                7: "13:50-14:25",
-                8: "14:25-15:00",
-                9: "15:00-15:35"
-            };
-            
-            const timeSlot = periodToSlot[periodNumber];
-            const dayIndex = parseInt(dayNumber) - 1;
-            
-            // Find all free teachers for this slot
-            const freeTeachers = [];
-            const busyTeachers = [];
-            
-            Object.entries(teacherData).forEach(([code, teacher]) => {
-                if (teacher.timetable[timeSlot]) {
-                    const classInfo = teacher.timetable[timeSlot][dayIndex];
-                    
-                    if (!classInfo || !classInfo.trim() || isBreakTime(classInfo)) {
-                        // Teacher is free
-                        const teacherForms = analyzeTeacherForms()[code];
-                        freeTeachers.push({
-                            code,
-                            name: teacher.name,
-                            forms: teacherForms.forms
-                        });
-                    } else {
-                        // Teacher is busy
-                        busyTeachers.push({
-                            code,
-                            name: teacher.name,
-                            classInfo: classInfo
-                        });
-                    }
-                }
-            });
-            
-            // Group free teachers by form
-            const teachersByForm = {
+            // Group teachers by forms
+            const teacherForms = analyzeTeacherForms();
+            const freeTeachersByForm = {
                 1: [],
                 2: [],
                 3: [],
@@ -1724,134 +1668,107 @@
                 6: [],
                 'Other': []
             };
-            
-            freeTeachers.forEach(teacher => {
-                if (teacher.forms.length === 0) {
-                    teachersByForm['Other'].push(teacher);
-                } else {
-                    teacher.forms.forEach(form => {
-                        teachersByForm[form].push(teacher);
-                    });
-                }
-            });
-            
-            // Display results
-            let html = `
-                <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-                    <h4 class="text-lg font-semibold mb-3 text-gray-800 dark:text-gray-200">
-                        📅 Day ${dayNumber}, Period ${periodNumber} (${timeSlot})
-                    </h4>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <h5 class="text-md font-medium text-green-700 dark:text-green-400 mb-3">
-                                ✅ Free Teachers (${freeTeachers.length})
-                            </h5>
-                            <div class="space-y-3 max-h-96 overflow-y-auto">
-            `;
-            
-            // Display free teachers by form
-            [1, 2, 3, 4, 5, 6, 'Other'].forEach(formKey => {
-                const teachers = teachersByForm[formKey];
-                if (teachers.length > 0) {
-                    const formLabel = formKey === 'Other' ? 'Other Teachers' : `Form ${formKey}`;
-                    
-                    // Remove duplicates (teachers who teach multiple forms)
-                    const uniqueTeachers = teachers.filter((teacher, index, array) => 
-                        array.findIndex(t => t.code === teacher.code) === index
-                    );
-                    
-                    html += `
-                        <div class="mb-3">
-                            <h6 class="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">${formLabel} (${uniqueTeachers.length})</h6>
-                            <div class="grid grid-cols-1 gap-1">
-                    `;
-                    
-                    uniqueTeachers.sort((a, b) => a.name.localeCompare(b.name));
-                    
-                    uniqueTeachers.forEach(teacher => {
-                        const formsList = teacher.forms.length > 0 ? ` (F${teacher.forms.join(',')})` : '';
-                        html += `
-                            <div class="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 px-3 py-2 rounded text-sm">
-                                <span class="font-medium">${teacher.code}</span> - ${teacher.name}<span class="text-xs opacity-75">${formsList}</span>
-                            </div>
-                        `;
-                    });
-                    
-                    html += `
-                            </div>
-                        </div>
-                    `;
-                }
-            });
-            
-            if (freeTeachers.length === 0) {
-                html += `
-                    <div class="text-center py-4 text-gray-500 dark:text-gray-400">
-                        No teachers are free during this time slot.
-                    </div>
-                `;
-            }
-            
-            html += `
-                            </div>
-                        </div>
-                        <div>
-                            <h5 class="text-md font-medium text-red-700 dark:text-red-400 mb-3">
-                                ❌ Busy Teachers (${busyTeachers.length})
-                            </h5>
-                            <div class="space-y-1 max-h-96 overflow-y-auto">
-            `;
-            
-            if (busyTeachers.length > 0) {
-                busyTeachers.sort((a, b) => a.name.localeCompare(b.name));
-                busyTeachers.forEach(teacher => {
-                    let displayClass = teacher.classInfo;
-                    if (teacher.classInfo === "1A,1B,1C,1D IS 101,102,103,104,501,BL,CL,IITC,PL,SL") {
-                        displayClass = "S1 STEAM";
-                    } else if (teacher.classInfo === "2A,2B,2C,2D IS 201,202,203,204,501,BL,CL,IITC,PL,SL") {
-                        displayClass = "S2 STEAM";
+
+            // Check all teachers
+            Object.entries(teacherData).forEach(([code, teacher]) => {
+                if (teacher.timetable[timeSlot]) {
+                    const classInfo = teacher.timetable[timeSlot][dayIndex];
+                    // Teacher is free if they have empty or break time
+                    if (!classInfo || !classInfo.trim() || isBreakTime(classInfo)) {
+                        const teacherFormData = teacherForms[code];
+                        if (teacherFormData.forms.length === 0) {
+                            freeTeachersByForm['Other'].push({
+                                code: code,
+                                name: teacherFormData.name
+                            });
+                        } else {
+                            teacherFormData.forms.forEach(form => {
+                                freeTeachersByForm[form].push({
+                                    code: code,
+                                    name: teacherFormData.name
+                                });
+                            });
+                        }
                     }
-                    
-                    html += `
-                        <div class="bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200 px-3 py-2 rounded text-sm">
-                            <span class="font-medium">${teacher.code}</span> - ${teacher.name}
-                            <div class="text-xs opacity-75 mt-1">${displayClass}</div>
-                        </div>
-                    `;
-                });
-            } else {
-                html += `
-                    <div class="text-center py-4 text-gray-500 dark:text-gray-400">
-                        All teachers are free during this time slot.
-                    </div>
-                `;
-            }
-            
-            html += `
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            slotResults.innerHTML = html;
-            slotResults.classList.remove('hidden');
+                }
+            });
+
+            // Remove empty form groups and sort teachers within each form
+            Object.keys(freeTeachersByForm).forEach(form => {
+                if (freeTeachersByForm[form].length === 0) {
+                    delete freeTeachersByForm[form];
+                } else {
+                    freeTeachersByForm[form].sort((a, b) => a.name.localeCompare(b.name));
+                }
+            });
+
+            return freeTeachersByForm;
         }
 
-        function showAlert(message) {
-            // Create a simple alert modal
-            const modal = document.createElement('div');
-            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
-            modal.innerHTML = `
-                <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-sm w-full mx-4">
-                    <p class="text-gray-700 dark:text-gray-300 mb-4">${message}</p>
-                    <div class="flex justify-end">
-                        <button class="px-4 py-2 bg-primary text-white hover:bg-purple-600 rounded transition-colors" onclick="this.closest('.fixed').remove()">OK</button>
-                    </div>
+        function updateTimeSlotAnalysis() {
+            const day = parseInt(document.getElementById('analyzeDay').value);
+            const period = parseInt(document.getElementById('analyzePeriod').value);
+            const resultDiv = document.getElementById('timeSlotResult');
+
+            if (!day || !period) {
+                resultDiv.innerHTML = '<div class="text-gray-500 dark:text-gray-400">Please select both day and period.</div>';
+                return;
+            }
+
+            // Skip Day 6 Period 8,9 (assembly periods)
+            if (day === 6 && (period === 8 || period === 9)) {
+                resultDiv.innerHTML = '<div class="text-yellow-600 dark:text-yellow-400">⚠️ Period not available - Assembly time on Day 6</div>';
+                return;
+            }
+
+            const freeTeachers = findTeachersAvailableAt(day, period);
+            
+            if (Object.keys(freeTeachers).length === 0) {
+                resultDiv.innerHTML = '<div class="text-gray-500 dark:text-gray-400">No teachers are free during this time slot.</div>';
+                return;
+            }
+
+            const totalCount = Object.values(freeTeachers).reduce((sum, teachers) => sum + teachers.length, 0);
+            
+            let html = `
+                <div class="text-lg font-semibold mb-4 text-green-700 dark:text-green-400">
+                    Free Teachers for Day ${day} Period ${period}: (${totalCount} total)
                 </div>
+                <div class="space-y-3">
             `;
-            document.body.appendChild(modal);
+
+            // Display teachers grouped by form
+            [1, 2, 3, 4, 5, 6, 'Other'].forEach(formKey => {
+                const teachers = freeTeachers[formKey];
+                if (teachers && teachers.length > 0) {
+                    const formLabel = formKey === 'Other' ? 'Other Teachers' : `Form ${formKey} Teachers`;
+                    html += `
+                        <div class="border border-gray-200 dark:border-gray-600 rounded-lg">
+                            <div class="px-4 py-2 bg-gray-50 dark:bg-gray-700 rounded-t-lg">
+                                <div class="flex justify-between items-center">
+                                    <span class="font-medium text-gray-800 dark:text-gray-200">${formLabel}</span>
+                                    <span class="text-sm text-gray-500 dark:text-gray-400">${teachers.length} teacher${teachers.length === 1 ? '' : 's'}</span>
+                                </div>
+                            </div>
+                            <div class="px-4 py-3 bg-white dark:bg-gray-800 rounded-b-lg">
+                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                    ${teachers.map(teacher => `
+                                        <div class="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 px-3 py-2 rounded-md text-sm">
+                                            <span class="font-semibold">${teacher.code}</span> - ${teacher.name}
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+
+            html += '</div>';
+            resultDiv.innerHTML = html;
         }
+
+
 
         // Initialize app when DOM is loaded
         document.addEventListener('DOMContentLoaded', initializeApp);
